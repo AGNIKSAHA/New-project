@@ -30,7 +30,7 @@ export const RootLayout = () => {
       <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/90 backdrop-blur">
         <nav className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4">
           <NavLink to="/" className="text-xl font-extrabold tracking-tight text-brand-700">
-            CommerceX
+            ecommerceX
           </NavLink>
           <form className="flex-1" onSubmit={onSearch}>
             <input

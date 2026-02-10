@@ -1,4 +1,4 @@
-# CommerceX Frontend
+# ecommerceX Frontend
 
 React + TypeScript frontend using:
 - React Router v7

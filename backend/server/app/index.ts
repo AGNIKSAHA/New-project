@@ -30,7 +30,7 @@ app.use(express.json());
 app.use(cookieParser());
 
 app.get("/health", (_req, res) => {
-  res.status(200).json({ status: "ok", service: "ecommerce-backend" });
+  res.status(200).json({ status: "ok", service: "ecommercex-backend" });
 });
 
 app.use("/api/v1/auth", authRouter);
