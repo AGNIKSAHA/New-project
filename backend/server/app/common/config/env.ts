@@ -20,6 +20,7 @@ const envSchema = z.object({
   MOBILE_ENCRYPTION_KEY: z.string().min(16),
   STRIPE_SECRET_KEY: z.string().min(10),
   STRIPE_WEBHOOK_SECRET: z.string().min(10),
+  TRIGGER_SECRET_KEY: z.string().optional().default("tr_dev_dummy_secret"),
 });
 
 const parsed = envSchema.safeParse(process.env);

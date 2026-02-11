@@ -10,6 +10,10 @@ import {
   errorHandler,
   notFoundHandler,
 } from "./common/middleware/error.middleware.js";
+import {
+  apiLimiter,
+  authLimiter,
+} from "./common/middleware/rateLimit.middleware.js";
 import { authRouter } from "./modules/auth/auth.routes.js";
 import { cartRouter } from "./modules/cart/cart.routes.js";
 import { consumerRouter } from "./modules/consumer/consumer.routes.js";
@@ -35,11 +39,14 @@ app.use("/api/v1/payments/webhook", express.raw({ type: "application/json" }));
 app.use(express.json());
 app.use(cookieParser());
 
+// Apply global API rate limit
+app.use("/api", apiLimiter);
+
 app.get("/health", (_req, res) => {
   res.status(200).json({ status: "ok", service: "ecommercex-backend" });
 });
 
-app.use("/api/v1/auth", authRouter);
+app.use("/api/v1/auth", authLimiter, authRouter);
 app.use("/api/v1/users", userRouter);
 app.use("/api/v1/consumer", consumerRouter);
 app.use("/api/v1/shopkeeper", shopkeeperRouter);
