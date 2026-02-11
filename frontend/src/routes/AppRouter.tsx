@@ -18,6 +18,8 @@ import { ProductsPage } from "../pages/ProductsPage";
 import { RegisterPage } from "../pages/RegisterPage";
 import { ResetPasswordPage } from "../pages/ResetPasswordPage";
 import { VerifyEmailPage } from "../pages/VerifyEmailPage";
+import { CheckoutSuccessPage } from "../pages/CheckoutSuccessPage";
+import { CheckoutCancelPage } from "../pages/CheckoutCancelPage";
 
 const router = createBrowserRouter([
   {
@@ -40,20 +42,27 @@ const router = createBrowserRouter([
           { path: "profile", element: <ProfilePage /> },
           {
             element: <RequireRole roles={["consumer"]} />,
-            children: [{ path: "cart", element: <CartPage /> }]
+            children: [
+              { path: "cart", element: <CartPage /> },
+              { path: "checkout/success", element: <CheckoutSuccessPage /> },
+              { path: "checkout/cancel", element: <CheckoutCancelPage /> },
+            ],
           },
           {
             element: <RequireRole roles={["shopkeeper"]} />,
             children: [
-              { path: "shopkeeper/products/new", element: <ShopkeeperCreateProductPage /> },
-              { path: "notifications", element: <NotificationsPage /> }
-            ]
-          }
-        ]
+              {
+                path: "shopkeeper/products/new",
+                element: <ShopkeeperCreateProductPage />,
+              },
+              { path: "notifications", element: <NotificationsPage /> },
+            ],
+          },
+        ],
       },
-      { path: "*", element: <NotFoundPage /> }
-    ]
-  }
+      { path: "*", element: <NotFoundPage /> },
+    ],
+  },
 ]);
 
 export const AppRouter = () => {

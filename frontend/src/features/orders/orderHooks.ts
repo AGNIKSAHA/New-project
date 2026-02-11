@@ -9,7 +9,7 @@ export const useOrders = (enabled = true) =>
   useQuery({
     queryKey: orderKey,
     queryFn: () => ordersApi.list(),
-    enabled
+    enabled,
   });
 
 export const useCreateOrder = () => {
@@ -21,7 +21,7 @@ export const useCreateOrder = () => {
       queryClient.invalidateQueries({ queryKey: orderKey });
       queryClient.invalidateQueries({ queryKey: ["cart"] });
       toast.success("Order placed successfully");
-    }
+    },
   });
 };
 
@@ -32,7 +32,8 @@ export const useCancelOrder = () => {
     mutationFn: (orderId: string) => ordersApi.cancel(orderId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: orderKey });
+      queryClient.invalidateQueries({ queryKey: ["products"] });
       toast.success("Order cancelled");
-    }
+    },
   });
 };

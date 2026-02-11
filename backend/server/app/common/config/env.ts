@@ -4,7 +4,9 @@ import { z } from "zod";
 dotenv.config();
 
 const envSchema = z.object({
-  NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
+  NODE_ENV: z
+    .enum(["development", "production", "test"])
+    .default("development"),
   PORT: z.coerce.number().default(5000),
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
   MONGODB_URI: z.string().min(10),
@@ -15,7 +17,9 @@ const envSchema = z.object({
   MAIL_SERVICE: z.string().min(2),
   EMAIL_USER: z.string().email(),
   EMAIL_PASS: z.string().min(4),
-  MOBILE_ENCRYPTION_KEY: z.string().min(16)
+  MOBILE_ENCRYPTION_KEY: z.string().min(16),
+  STRIPE_SECRET_KEY: z.string().min(10),
+  STRIPE_WEBHOOK_SECRET: z.string().min(10),
 });
 
 const parsed = envSchema.safeParse(process.env);

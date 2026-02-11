@@ -1,7 +1,11 @@
 import { useEffect, useState } from "react";
 import toast from "react-hot-toast";
-import { useCart, useRemoveCartItem, useUpsertCartItem } from "../features/cart/cartHooks";
-import { useCreateOrder } from "../features/orders/orderHooks";
+import {
+  useCart,
+  useRemoveCartItem,
+  useUpsertCartItem,
+} from "../features/cart/cartHooks";
+import { useCreateCheckoutSession } from "../features/payment/paymentHooks";
 import { useProfile } from "../features/profile/profileHooks";
 import type { ConsumerProfile } from "../types/api";
 import { EmptyState } from "../components/EmptyState";
@@ -14,14 +18,18 @@ export const CartPage = () => {
   const profileQuery = useProfile();
   const removeItem = useRemoveCartItem();
   const upsertItem = useUpsertCartItem();
-  const createOrder = useCreateOrder();
+  const checkoutSession = useCreateCheckoutSession();
 
-  const [selectedDeliveryIndex, setSelectedDeliveryIndex] = useState<string>("");
+  const [selectedDeliveryIndex, setSelectedDeliveryIndex] =
+    useState<string>("");
   const [recipientName, setRecipientName] = useState("");
   const [address, setAddress] = useState("");
   const [mobileNumber, setMobileNumber] = useState("");
   const [alternateNumber, setAlternateNumber] = useState("");
-  const consumerProfile = profileQuery.data?.role === "consumer" ? (profileQuery.data.profile as ConsumerProfile | null) : null;
+  const consumerProfile =
+    profileQuery.data?.role === "consumer"
+      ? (profileQuery.data.profile as ConsumerProfile | null)
+      : null;
   const deliveryContacts = consumerProfile?.deliveryContacts ?? [];
 
   useEffect(() => {
@@ -44,10 +52,18 @@ export const CartPage = () => {
 
   const lines = cartQuery.data ?? [];
   if (lines.length === 0) {
-    return <EmptyState title="Your cart is empty" description="Add items from the products page." />;
+    return (
+      <EmptyState
+        title="Your cart is empty"
+        description="Add items from the products page."
+      />
+    );
   }
 
-  const total = lines.reduce((sum, line) => sum + (line.product?.price ?? 0) * line.quantity, 0);
+  const total = lines.reduce(
+    (sum, line) => sum + (line.product?.price ?? 0) * line.quantity,
+    0,
+  );
 
   const onSelectSavedContact = (indexValue: string): void => {
     setSelectedDeliveryIndex(indexValue);
@@ -65,7 +81,7 @@ export const CartPage = () => {
     setAddress(contact.address);
   };
 
-  const onPlaceOrder = async (): Promise<void> => {
+  const onPayWithStripe = async (): Promise<void> => {
     if (recipientName.trim().length < 2) {
       toast.error("Please enter recipient name");
       return;
@@ -87,21 +103,25 @@ export const CartPage = () => {
     }
 
     try {
-      await createOrder.mutateAsync({
+      const result = await checkoutSession.mutateAsync({
         shippingDetails: {
           recipientName: recipientName.trim(),
           address: address.trim(),
           mobileNumber: mobileNumber.trim(),
-          ...(alternateNumber.trim().length > 0 ? { alternateNumber: alternateNumber.trim() } : {})
-        }
+          ...(alternateNumber.trim().length > 0
+            ? { alternateNumber: alternateNumber.trim() }
+            : {}),
+        },
       });
-      setSelectedDeliveryIndex("");
-      setRecipientName("");
-      setAddress("");
-      setMobileNumber(consumerProfile?.mobileNumber ?? "");
-      setAlternateNumber(consumerProfile?.alternateNumber ?? "");
+
+      // Redirect to Stripe Checkout
+      if (result.sessionUrl) {
+        window.location.href = result.sessionUrl;
+      } else {
+        toast.error("Failed to create checkout session");
+      }
     } catch {
-      toast.error("Order placement failed");
+      toast.error("Payment initialization failed");
     }
   };
 
@@ -110,9 +130,17 @@ export const CartPage = () => {
       <h1 className="text-2xl font-bold">Your Cart</h1>
       <div className="mt-6 space-y-3">
         {lines.map((line) => (
-          <div key={line.productId} className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4">
+          <div
+            key={line.productId}
+            className="flex items-center justify-between rounded-xl border border-slate-200 bg-white p-4"
+          >
             <div>
-              <p className="font-semibold">{line.product?.title ?? line.productId}</p>
+              <p className="font-semibold">
+                {line.product?.title ?? line.productId}
+              </p>
+              <p className="text-sm text-slate-500">
+                ${(line.product?.price ?? 0).toFixed(2)} each
+              </p>
               <div className="mt-1 flex items-center gap-2 text-sm text-slate-600">
                 <span>Qty:</span>
                 <button
@@ -123,7 +151,7 @@ export const CartPage = () => {
                     try {
                       await upsertItem.mutateAsync({
                         productId: line.productId,
-                        quantity: line.quantity - 1
+                        quantity: line.quantity - 1,
                       });
                     } catch {
                       toast.error("Quantity update failed");
@@ -132,7 +160,9 @@ export const CartPage = () => {
                 >
                   -
                 </button>
-                <span className="min-w-6 text-center font-medium">{line.quantity}</span>
+                <span className="min-w-6 text-center font-medium">
+                  {line.quantity}
+                </span>
                 <button
                   type="button"
                   className="rounded border border-slate-300 px-2"
@@ -141,7 +171,7 @@ export const CartPage = () => {
                     try {
                       await upsertItem.mutateAsync({
                         productId: line.productId,
-                        quantity: line.quantity + 1
+                        quantity: line.quantity + 1,
                       });
                     } catch {
                       toast.error("Quantity update failed");
@@ -152,29 +182,42 @@ export const CartPage = () => {
                 </button>
               </div>
             </div>
-            <button
-              type="button"
-              className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm"
-              onClick={async () => {
-                try {
-                  await removeItem.mutateAsync(line.productId);
-                } catch {
-                  toast.error("Remove failed");
-                }
-              }}
-            >
-              Remove
-            </button>
+            <div className="flex flex-col items-end gap-2">
+              <p className="font-semibold text-brand-700">
+                ${((line.product?.price ?? 0) * line.quantity).toFixed(2)}
+              </p>
+              <button
+                type="button"
+                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm text-red-500 hover:bg-red-50 transition"
+                onClick={async () => {
+                  try {
+                    await removeItem.mutateAsync(line.productId);
+                  } catch {
+                    toast.error("Remove failed");
+                  }
+                }}
+              >
+                Remove
+              </button>
+            </div>
           </div>
         ))}
       </div>
 
       <div className="mt-6 rounded-xl border border-brand-100 bg-white p-5">
-        <p className="text-lg font-bold">Total: ${total.toFixed(2)}</p>
+        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
+          <p className="text-lg font-bold">Order Total</p>
+          <p className="text-2xl font-extrabold bg-gradient-to-r from-brand-600 to-brand-800 bg-clip-text text-transparent">
+            ${total.toFixed(2)}
+          </p>
+        </div>
 
         <div className="mt-4 space-y-3">
           <div>
-            <label htmlFor="saved-delivery-contact" className="mb-1 block text-sm font-medium text-slate-700">
+            <label
+              htmlFor="saved-delivery-contact"
+              className="mb-1 block text-sm font-medium text-slate-700"
+            >
               Saved Name + Address (Optional)
             </label>
             <select
@@ -186,7 +229,10 @@ export const CartPage = () => {
             >
               <option value="">Select saved contact</option>
               {deliveryContacts.map((entry, index) => (
-                <option key={`${entry.recipientName}-${entry.address}-${index}`} value={index}>
+                <option
+                  key={`${entry.recipientName}-${entry.address}-${index}`}
+                  value={index}
+                >
                   {entry.recipientName} - {entry.address}
                 </option>
               ))}
@@ -194,7 +240,10 @@ export const CartPage = () => {
           </div>
 
           <div>
-            <label htmlFor="order-recipient-name" className="mb-1 block text-sm font-medium text-slate-700">
+            <label
+              htmlFor="order-recipient-name"
+              className="mb-1 block text-sm font-medium text-slate-700"
+            >
               Name
             </label>
             <input
@@ -209,7 +258,10 @@ export const CartPage = () => {
           </div>
 
           <div>
-            <label htmlFor="order-address" className="mb-1 block text-sm font-medium text-slate-700">
+            <label
+              htmlFor="order-address"
+              className="mb-1 block text-sm font-medium text-slate-700"
+            >
               Address
             </label>
             <textarea
@@ -225,7 +277,10 @@ export const CartPage = () => {
           </div>
 
           <div>
-            <label htmlFor="order-mobile-number" className="mb-1 block text-sm font-medium text-slate-700">
+            <label
+              htmlFor="order-mobile-number"
+              className="mb-1 block text-sm font-medium text-slate-700"
+            >
               Personal Mobile Number
             </label>
             <input
@@ -240,7 +295,10 @@ export const CartPage = () => {
           </div>
 
           <div>
-            <label htmlFor="order-alternate-number" className="mb-1 block text-sm font-medium text-slate-700">
+            <label
+              htmlFor="order-alternate-number"
+              className="mb-1 block text-sm font-medium text-slate-700"
+            >
               Alternate Number
             </label>
             <input
@@ -254,14 +312,68 @@ export const CartPage = () => {
           </div>
         </div>
 
+        {/* Stripe Payment Button */}
         <button
           type="button"
-          className="mt-4 rounded-lg bg-brand-700 px-4 py-2 text-white"
-          disabled={createOrder.isPending}
-          onClick={onPlaceOrder}
+          className="mt-5 flex w-full items-center justify-center gap-3 rounded-lg bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-3 text-base font-semibold text-white shadow-lg transition-all hover:from-indigo-700 hover:to-purple-700 hover:shadow-xl disabled:opacity-60 disabled:cursor-not-allowed"
+          disabled={checkoutSession.isPending}
+          onClick={onPayWithStripe}
         >
-          {createOrder.isPending ? "Placing order..." : "Place Order"}
+          {checkoutSession.isPending ? (
+            <>
+              <svg
+                className="h-5 w-5 animate-spin"
+                viewBox="0 0 24 24"
+                fill="none"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                />
+              </svg>
+              Redirecting to payment...
+            </>
+          ) : (
+            <>
+              <svg
+                className="h-5 w-5"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="1" y="4" width="22" height="16" rx="2" ry="2" />
+                <line x1="1" y1="10" x2="23" y2="10" />
+              </svg>
+              Pay ${total.toFixed(2)} with Stripe
+            </>
+          )}
         </button>
+
+        <div className="mt-3 flex items-center justify-center gap-2 text-xs text-slate-400">
+          <svg
+            className="h-4 w-4"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+            <path d="M7 11V7a5 5 0 0110 0v4" />
+          </svg>
+          Secured by Stripe • 256-bit SSL encryption
+        </div>
       </div>
     </section>
   );

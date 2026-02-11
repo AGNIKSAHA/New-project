@@ -50,11 +50,11 @@ const productSchema = new Schema(
     price: { type: Number, required: true, min: 0 },
     stock: { type: Number, required: true, min: 0 },
     category: { type: String, required: true },
-    shopkeeperId: { type: String, required: false, index: true }
+    shopkeeperId: { type: String, required: false, index: true },
   },
   {
-    timestamps: false
-  }
+    timestamps: false,
+  },
 );
 
 const ProductModel = model<ProductDb>("Product", productSchema);
@@ -66,7 +66,7 @@ const toEntity = (doc: ProductDb): ProductEntity => ({
   imageUrl: doc.imageUrl,
   price: doc.price,
   stock: doc.stock,
-  category: doc.category
+  category: doc.category,
 });
 
 const toEntityWithShopkeeper = (doc: ProductDb): ProductWithShopkeeper => ({
@@ -77,7 +77,7 @@ const toEntityWithShopkeeper = (doc: ProductDb): ProductWithShopkeeper => ({
   price: doc.price,
   stock: doc.stock,
   category: doc.category,
-  ...(doc.shopkeeperId ? { shopkeeperId: doc.shopkeeperId } : {})
+  ...(doc.shopkeeperId ? { shopkeeperId: doc.shopkeeperId } : {}),
 });
 
 const seedProducts: Omit<ProductEntity, "id">[] = [
@@ -87,7 +87,7 @@ const seedProducts: Omit<ProductEntity, "id">[] = [
     imageUrl: "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab",
     price: 69,
     stock: 30,
-    category: "fashion"
+    category: "fashion",
   },
   {
     title: "Wireless Keyboard",
@@ -95,7 +95,7 @@ const seedProducts: Omit<ProductEntity, "id">[] = [
     imageUrl: "https://images.unsplash.com/photo-1517336714739-489689fd1ca8",
     price: 119,
     stock: 20,
-    category: "electronics"
+    category: "electronics",
   },
   {
     title: "Running Shoes",
@@ -103,8 +103,8 @@ const seedProducts: Omit<ProductEntity, "id">[] = [
     imageUrl: "https://images.unsplash.com/photo-1542291026-7eec264c27ff",
     price: 89,
     stock: 45,
-    category: "sports"
-  }
+    category: "sports",
+  },
 ];
 
 export const productStore = {
@@ -121,7 +121,7 @@ export const productStore = {
     if (input.search) {
       filter.$or = [
         { title: { $regex: input.search, $options: "i" } },
-        { description: { $regex: input.search, $options: "i" } }
+        { description: { $regex: input.search, $options: "i" } },
       ];
     }
 
@@ -132,7 +132,7 @@ export const productStore = {
     if (input.minPrice !== undefined || input.maxPrice !== undefined) {
       filter.price = {
         ...(input.minPrice !== undefined ? { $gte: input.minPrice } : {}),
-        ...(input.maxPrice !== undefined ? { $lte: input.maxPrice } : {})
+        ...(input.maxPrice !== undefined ? { $lte: input.maxPrice } : {}),
       };
     }
 
@@ -145,7 +145,7 @@ export const productStore = {
         .limit(input.limit)
         .lean<ProductDb[]>()
         .exec(),
-      ProductModel.countDocuments(filter).exec()
+      ProductModel.countDocuments(filter).exec(),
     ]);
 
     const totalPages = Math.max(1, Math.ceil(total / input.limit));
@@ -156,8 +156,8 @@ export const productStore = {
         page: input.page,
         limit: input.limit,
         total,
-        totalPages
-      }
+        totalPages,
+      },
     };
   },
 
@@ -166,17 +166,24 @@ export const productStore = {
     return product ? toEntity(product) : undefined;
   },
 
-  async findByIdWithShopkeeper(id: string): Promise<ProductWithShopkeeper | undefined> {
+  async findByIdWithShopkeeper(
+    id: string,
+  ): Promise<ProductWithShopkeeper | undefined> {
     const product = await ProductModel.findById(id).lean<ProductDb>().exec();
     return product ? toEntityWithShopkeeper(product) : undefined;
   },
 
   async listByShopkeeperId(shopkeeperId: string): Promise<ProductEntity[]> {
-    const items = await ProductModel.find({ shopkeeperId }).sort({ _id: -1 }).lean<ProductDb[]>().exec();
+    const items = await ProductModel.find({ shopkeeperId })
+      .sort({ _id: -1 })
+      .lean<ProductDb[]>()
+      .exec();
     return items.map(toEntity);
   },
 
-  async create(input: Omit<ProductEntity, "id"> & { shopkeeperId: string }): Promise<ProductEntity> {
+  async create(
+    input: Omit<ProductEntity, "id"> & { shopkeeperId: string },
+  ): Promise<ProductEntity> {
     const product = await ProductModel.create(input);
     return toEntity(product.toObject());
   },
@@ -184,16 +191,59 @@ export const productStore = {
   async updateByShopkeeper(
     id: string,
     shopkeeperId: string,
-    input: Partial<Omit<ProductEntity, "id">>
+    input: Partial<Omit<ProductEntity, "id">>,
   ): Promise<ProductEntity | undefined> {
-    const product = await ProductModel.findOneAndUpdate({ _id: id, shopkeeperId }, input, { new: true })
+    const product = await ProductModel.findOneAndUpdate(
+      { _id: id, shopkeeperId },
+      input,
+      { new: true },
+    )
       .lean<ProductDb>()
       .exec();
     return product ? toEntity(product) : undefined;
   },
 
   async removeByShopkeeper(id: string, shopkeeperId: string): Promise<boolean> {
-    const deleted = await ProductModel.findOneAndDelete({ _id: id, shopkeeperId }).exec();
+    const deleted = await ProductModel.findOneAndDelete({
+      _id: id,
+      shopkeeperId,
+    }).exec();
     return Boolean(deleted);
-  }
+  },
+
+  /**
+   * Atomically decrement stock for each item after a successful payment.
+   * Returns false if any product has insufficient stock.
+   */
+  async decrementStock(
+    items: Array<{ productId: string; quantity: number }>,
+  ): Promise<boolean> {
+    for (const item of items) {
+      const result = await ProductModel.findOneAndUpdate(
+        { _id: item.productId, stock: { $gte: item.quantity } },
+        { $inc: { stock: -item.quantity } },
+        { new: true },
+      ).exec();
+
+      if (!result) {
+        return false;
+      }
+    }
+    return true;
+  },
+
+  /**
+   * Restore stock for each item when an order is cancelled/refunded.
+   */
+  async restoreStock(
+    items: Array<{ productId: string; quantity: number }>,
+  ): Promise<void> {
+    await Promise.all(
+      items.map((item) =>
+        ProductModel.findByIdAndUpdate(item.productId, {
+          $inc: { stock: item.quantity },
+        }).exec(),
+      ),
+    );
+  },
 };
